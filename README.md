@@ -1,213 +1,240 @@
-# Face Recognition Attendance System
+Face Recognition Attendance System – Backend
 
-A modern, real-time, privacy-first face recognition attendance system with offline kiosk support, manual resolution queue, and OTP fallback. Designed for universities and colleges.
+This backend provides student face enrollment and recognition using InsightFace embeddings and a FastAPI server.
 
----
+Tech Stack:
+-FastAPI
+-InsightFace (embedding-based recognition)
+-ONNX Runtime
+-Uvicorn
+-Python 3.10
+-PostgreSQL + SQLAlchemy ORM
+-Conda environment
 
-## Features
 
-- **Four roles**: Admin · Faculty · Student · Kiosk
-- Real-time attendance via WebSocket
-- Offline-capable kiosk (IndexedDB + Service Worker queue)
-- Edge or server-side embedding computation
-- Manual unresolved queue with top candidate suggestions
-- OTP fallback for missed/unresolved students
-- Automatic raw image purging (privacy compliant)
-- CSV export & full audit trail
-- Minimal liveness check (prevents photo spoofing)
-- Role-based access with JWT
+🔧 Setup Instructions (For Any Machine)
 
----
 
-## High-Level Architecture
+1. Install Miniconda (recommended)
+Download Miniconda from https://docs.conda.io/en/latest/miniconda.html
 
-┌─────────────────────────────────────┐
-│ Frontend (React PWA) │
-│ Admin │ Faculty │ Student │ Kiosk │
-└───────────────↑↓────────────────────┘
-│ REST + WebSocket
-┌───────────────▼────────────────────┐
-│ Backend (FastAPI - Python) │
-└───────────────↑↓────────────────────┘
-┌───────────────▼────────────────────┐
-│ PostgreSQL + Local/S3 File Store │
-└───────────────↑↓────────────────────┘
-│ ML Inference
-┌───────────────▼────────────────────┐
-│ InsightFace / ArcFace / FaceNet │
-└────────────────────────────────────┘
 
-yaml
-Copy code
+2. Clone the Repo
+git clone https://github.com/WilliamHails/7th-sem-project.git
 
----
+cd 7th-sem-project
 
-## Frontend (React PWA)
+3. Create and activate environment
 
-Progressive Web App with role-based routing and offline kiosk support.
+run these in anaconda prompt:
 
-### Admin Panel
-- Student management (CRUD): enrollment_no, name, semester, email
-- Subject management & bulk student assignment
-- Enrollment image upload:
-  - Multi-file upload
-  - Webcam capture (auto-capture N frames or manual)
-- **Train/Index** button → recompute embeddings & canonical vectors
-- Model version + training timestamp display
-- Export attendance CSV (date, subject filters)
-- View prediction logs & unresolved entries
+    conda create -n fr_env python=3.10 -y
 
-### Faculty Dashboard
-- Start/Stop attendance window (set duration)
-- Live attendance feed (WebSocket)
-- Unresolved queue with:
-  - Thumbnail preview
-  - Top 3 nearest candidates
-  - Actions: Manual Mark · Send OTP · Reject
-- Attendance reports & CSV export per subject/date range
+    conda activate fr_env
 
-### Student Portal
-- View enrolled subjects
-- Attendance percentage & detailed history
-- "Request Help" → triggers OTP if missed during active window
-- Simple profile page
+#####Important#####
 
-### Kiosk Mode (Offline-First)
-- Fullscreen, auto-start ready
-- "No active session" screen when idle
-- Active session:
-  - Live webcam preview
-  - Continuous detection & recognition
-  - Instant visual feedback:
-    - ✔ Matched (green)
-    - ✖ Unknown (red)
-    - ✖ No face / Multiple faces
-    - ✖ Low confidence
-- Local queue (IndexedDB) when offline → auto-sync on reconnect
-- Configurable classroom/location ID
+Ja korba fr_env er bhitre, especially all those pip commands, naile ulda palda hoiya jae backend e jodi baire kora hoe.
 
----
+4. Install dependencies
+run in said anaconda prompt:
 
-## Backend (FastAPI - Python)
+    pip install -r requirements.txt
 
-### Core Features
-- REST API + WebSocket for real-time updates
-- Minimal auth for Admin/Faculty (username/password)
-- JWT protection for sensitive endpoints
-- Rate limiting on recognition & OTP routes
-- HTTPS/TLS enforced
+###This installs the exact working versions used during development.
 
----
 
-## Key Endpoints
+5. Setup PostgreSQL Database
 
-| Method | Endpoint                | Description |
-|--------|-------------------------|-------------|
-| POST   | `/students`             | Create student |
-| GET    | `/students/{id}`        | Get student details |
-| POST   | `/students/{id}/images` | Upload enrollment images (multipart) |
-| POST   | `/admin/train`          | Recompute embeddings & canonical vectors |
-| POST   | `/windows/arm`          | Start attendance window |
-| POST   | `/windows/close`        | End attendance window |
-| GET    | `/windows/active`       | Get current active window |
-| POST   | `/recognize`            | Submit embedding/cropped face for match |
-| WS     | `/ws`                   | Real-time updates |
-| POST   | `/otp/request`          | Student requests OTP |
-| POST   | `/otp/verify`           | Verify OTP & mark attendance |
+a. Create the database
+    Use pgAdmin or psql:
 
----
+    CREATE DATABASE facial_attendance;
 
-## Database Schema (PostgreSQL)
 
-```sql
-students
-└── enrollment_no (PK), name, semester, email, consent_ts, created_at
+b. Update your PostgreSQL credentials inside:
+    backend/app/database.py
 
-subjects
-└── id (PK), code, name, semester
 
-student_subjects
-└── id, enrollment_no FK, subject_id FK
+    Modify these lines:
 
-student_images
-└── id, enrollment_no FK, file_path, processed_path, captured_at
+    DATABASE_URL = "postgresql://postgres:<YOUR_PASSWORD>@localhost:5432/facial_attendance"
 
-embeddings
-└── id, enrollment_no FK, vector BYTEA, image_id FK
 
-student_profile
-└── enrollment_no (PK), canonical_embedding BYTEA, updated_at
+c. Ensure your tables exist
 
-attendance_windows
-└── id, subject_id, faculty_id, start_ts, end_ts, status
+    Your SQL tables must be imported into the facial_attendance database (students, attendance, sessions, predictions_log, model_info, etc.).
 
-attendance_records
-└── id, enrollment_no, subject_id, timestamp, method, confidence, window_id
+    Your teammates simply need to run your SQL file inside pgAdmin.
 
-prediction_logs
-└── id, attempted_at, predicted_enrollment, confidence, status, note, window_id
-```
 
-## Indexes
 
-- `attendance_records(subject_id, timestamp)`
-- `embeddings(enrollment_no)`
-- `prediction_logs(window_id)`
+6. Directory Structure Required for the Backend
 
----
+These folders will be created automatically, but ensure repo layout is:
 
-## Data Retention
+7th-sem-project/
+    backend/
+        app/
+            main.py
+            models.py
+            database.py
+            embed_utils.py
 
-- **Raw images** → auto-purge after **30 days**
-- **Embeddings** → retained unless student removed
-- **Logs** → retained for **1 year**
+    data/
+    enrollments/      # canonical embeddings stored here
+    raw/              # original enrollment images
+    predictions/      # recognition attempt images
 
----
 
-## Machine Learning Pipeline
+7. Run the backend
+same in anaconda prompt:
 
-### Face Detection
-- InsightFace or OpenCV DNN
-- Configurable: `scaleFactor`, `minNeighbors`
 
-### Preprocessing
-- Optional landmark alignment
-- Resize to **112×112** or **160×160**
-- Normalize pixel values
+    conda activate fr_env
+    cd backend
+    uvicorn app.main:app --reload --port 8000
 
-### Embedding Model
-- **ArcFace** (recommended) or **FaceNet**
-- 512-dimensional **L2-normalized** vectors
 
-### Matching
-- Canonical embedding = mean of all normalized enrollment embeddings
-- Similarity metric → **Cosine similarity**
-- Default threshold → **0.65**
-- Return **top-3 candidates** for unresolved cases
+Backend will start on:
+http://127.0.0.1:8000
 
-### Liveness (MVP)
-Compare **two consecutive frames**:
-- Embedding distance < **0.3**
-- Low motion difference  
-Helps prevent basic photo spoofing.
 
-### Optional Indexing
-- **FAISS** index recommended for datasets **>10,000 students**
+6. Testing (using postman{install postman if not installed} )
 
----
+a. Test the health endpoint
 
-## Configuration (`.env`)
+    Method: GET
+    URL:http://127.0.0.1:8000/health
 
-```env
-MATCH_THRESHOLD=0.65
-MIN_ENROLLMENT_IMAGES=8
-IMAGE_PURGE_DAYS=30
-OTP_RATE_LIMIT=3/hour
-RECOGNITION_RATE_LIMIT=5/sec
-EMBEDDING_MODE=edge
-DATABASE_URL=postgresql://user:password@localhost/db
-JWT_SECRET=your_secret_key
-```
+    Expected Response:
+    {"status": "ok"}
 
-otp_requests
-└── id, student_enrollment, window_id, hashed_otp, expires_at, status
+    If this works, the FastAPI server is running fine.
+
+b. Test ENROLL endpoint
+
+    This endpoint registers a new student and stores their embedding.
+    Method: POST
+    URL:http://127.0.0.1:8000/enroll
+
+    In Postman:
+    Go to Body → form-data.
+    Add the following fields:
+    KEY	            TYPE	        VALUE
+    enrollment_no   Text	        22UCS001
+    name	        Text	        Arijit Das (or any name)
+    semester        text            7
+    file	        File	        choose an image file (front face photo)
+
+
+    What enrollment does:
+
+    -Inserts/updates student in DB
+
+    -Saves photo to data/raw/
+
+    -Saves embedding later when canonical embedding is added
+
+    -Inserts into student_images table
+
+
+    Response example:
+
+    {
+    "status": "success",
+    "message": "Student enrolled successfully"
+    }
+
+    Also, your backend folder data/enrollments/1.json will be created containing the embedding.
+
+
+c. RECOGNIZE a student
+
+    This checks whether the face in the image matches any enrolled student.
+
+    Method: POST
+    URL:http://127.0.0.1:8000/recognize
+
+    In Postman:
+    Go to Body → form-data.
+
+    Add:
+    KEY	            TYPE	            VALUE
+    file	        File	            choose another picture of the SAME person
+    session_id      (optional)number    1
+
+
+    Recognition does:
+
+    -Loads canonical embeddings from data/enrollments
+
+    -Generates probe embedding
+
+    -Finds best cosine similarity match
+
+    -Logs the attempt in predictions_log
+
+    -If matched + session_id provided → inserts row in attendance
+
+
+
+    Expected response if matched:
+    {
+    "match": true,
+    "student_id": "22UCS001",
+    "score": 0.82,
+    "enrollment_no": "22UCS001",
+    "logged": true
+    }
+
+    The score is similarity — higher means better.
+
+
+    Failure Response (no match):
+    {
+    "match": false,
+    "best_score": 0.24,
+    "logged": true
+    }
+
+
+7. Creating Classes & Sessions (Required for Attendance)
+
+Your backend expects valid sessions.
+
+Add a class:
+
+    INSERT INTO classes (title, course_code)
+    VALUES ('AI Lab', 'CS701')
+    RETURNING id;
+
+
+Use the returned class_id to create a session:
+
+    INSERT INTO sessions (class_id, session_date)
+    VALUES (1, CURRENT_DATE)
+    RETURNING id;
+
+
+Use this session_id in Postman when testing /recognize, using 
+
+Method: POST
+
+URL: http://127.0.0.1:8000/recognize?session_id={returned id}
+
+Body → form-data:
+
+file → File → again an image of 22UCS001
+
+
+
+🧠 Important Notes for Teammates
+
+    Always run backend from Anaconda Prompt, inside fr_env.
+
+    Never reinstall InsightFace manually — use only requirements.txt.
+
+    PostgreSQL must be running before starting backend.
+
+    Embeddings will not work unless .npy canonical files exist in data/enrollments/.
