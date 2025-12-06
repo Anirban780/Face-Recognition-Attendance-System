@@ -1,0 +1,10 @@
+flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.6
+flask-sqlalchemy==3.1.1
+insightface==0.7.3
+onnxruntime==1.16.3
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+Pillow==10.0.0
+eventlet==0.33.3
