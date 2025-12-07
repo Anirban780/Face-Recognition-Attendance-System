@@ -1,280 +1,245 @@
-import React, { useEffect, useState } from 'react';
-import { api, SUBJECTS } from '../services/api';
-import { AttendanceSession, Student } from '../types';
-import { useAuth } from '../context/AuthContext';
-import { Play, Calendar, Users, Clock, ClipboardList, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { Play, Square, Users, Clock, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-export const FacultyDashboard: React.FC = () => {
-  const { user } = useAuth();
-  const [sessions, setSessions] = useState<AttendanceSession[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState('');
+interface FacultyDashboardProps {
+  onNavigate: (page: string) => void;
+}
 
-  // Manual Attendance Modal State
-  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
-  const [selectedSession, setSelectedSession] = useState<AttendanceSession | null>(null);
-  const [sessionStudents, setSessionStudents] = useState<{ student: Student, isPresent: boolean }[]>([]);
+const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
+  const { currentUser, subjects, sessions, attendanceRecords, startSession, endSession, users } = useApp();
+  const [selectedSubject, setSelectedSubject] = useState('');
+  // Default start time: Now
+  // Default end time: Now + 1 hour
+  const [startTime, setStartTime] = useState(() => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  });
+  const [endTime, setEndTime] = useState(() => {
+    const now = new Date();
+    now.setHours(now.getHours() + 1);
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    return now.toISOString().slice(0, 16);
+  });
+
+  // Filter subjects assigned to this faculty
+  const facultySubjects = subjects.filter(sub => currentUser?.subjectIds?.includes(sub.id));
+
+  // Filter sessions created by this faculty
+  const mySessions = sessions.filter(s => s.facultyId === currentUser?.id);
+  const activeSession = mySessions.find(s => s.isActive);
+
+  // Calculate live stats for active session
+  const [liveStats, setLiveStats] = useState<any[]>([]);
 
   useEffect(() => {
-    loadSessions();
-  }, []);
+    if (activeSession) {
+      const records = attendanceRecords.filter(r => r.sessionId === activeSession.id);
+      
+      // Calculate students who are supposed to be in this class
+      // In a real app, check students who have this subjectId in their assignments
+      const assignedStudents = users.filter(u => u.role === 'STUDENT' && u.subjectIds?.includes(activeSession.subjectId));
+      
+      const presentCount = records.length;
+      const absentCount = assignedStudents.length - presentCount;
 
-  const loadSessions = async () => {
-    setIsLoading(true);
-    try {
-      const data = await api.getSessions();
-      setSessions(data);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoading(false);
+      setLiveStats([
+        { name: 'Present', value: presentCount, fill: '#4ade80' },
+        { name: 'Absent', value: Math.max(0, absentCount), fill: '#f87171' },
+      ]);
+    }
+  }, [attendanceRecords, activeSession, users]);
+
+  const handleStartSession = () => {
+    if (selectedSubject && startTime && endTime) {
+      startSession(selectedSubject, startTime, endTime);
     }
   };
 
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSubjectCode) return;
-    try {
-      await api.createSession(selectedSubjectCode);
-      setSelectedSubjectCode('');
-      loadSessions();
-    } catch (error) {
-      console.error(error);
+  const handleEndSession = () => {
+    if (activeSession) {
+      endSession(activeSession.id);
     }
   };
 
-  const openAttendanceModal = async (session: AttendanceSession) => {
-    setSelectedSession(session);
-    setShowAttendanceModal(true);
-    
-    // 1. Get all students enrolled in this subject
-    const enrolledStudents = await api.getStudentsBySubject(session.subjectCode);
-    
-    // 2. Get attendance records for this session
-    const records = await api.getAttendanceBySession(session.subject, session.date);
-    
-    // 3. Merge data
-    const mergedData = enrolledStudents.map(student => {
-      const isPresent = records.some(r => r.enrollmentNo === student.enrollmentNo && r.status === 'Present');
-      return { student, isPresent };
-    });
-    
-    setSessionStudents(mergedData);
-  };
-
-  const toggleAttendance = async (student: Student, currentStatus: boolean) => {
-    if (!selectedSession) return;
-    const newStatus = !currentStatus;
-    
-    // Update UI immediately (optimistic)
-    setSessionStudents(prev => prev.map(item => 
-      item.student.id === student.id ? { ...item, isPresent: newStatus } : item
-    ));
-
-    // Call API
-    await api.updateManualAttendance(
-      student.enrollmentNo, 
-      selectedSession.subject, 
-      selectedSession.date, 
-      newStatus ? 'Present' : 'Absent'
-    );
-    
-    // Refresh session list to update counts
-    loadSessions(); 
-  };
-
-  // Get subjects assigned to this faculty
-  const mySubjects = SUBJECTS.filter(s => user?.assignedSubjects?.includes(s.code));
-
-  // Prepare chart data
-  const chartData = sessions.map(s => ({
-    name: s.subjectCode,
-    present: s.totalPresent,
-    total: s.totalStudents
-  }));
+  if (!currentUser) return null;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Create Session Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-            <Play className="w-5 h-5 mr-2 text-green-600" />
-            Start New Session
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <h1 className="text-2xl font-bold text-gray-900 mb-8">Faculty Dashboard</h1>
+
+      {/* Active Session Control */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+            <Calendar className="mr-2 text-indigo-600" size={20} />
+            Class Controls
           </h2>
-          <form onSubmit={handleCreateSession} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Select Subject</label>
-              <select
-                className="w-full border border-gray-300 rounded-lg p-2 focus:ring-blue-500 focus:border-blue-500"
-                value={selectedSubjectCode}
-                onChange={e => setSelectedSubjectCode(e.target.value)}
-              >
-                <option value="">-- Select Subject --</option>
-                {mySubjects.map(sub => (
-                    <option key={sub.code} value={sub.code}>
-                        {sub.code} - {sub.name}
-                    </option>
-                ))}
-              </select>
-            </div>
-            {mySubjects.length === 0 && (
-                <p className="text-xs text-red-500">You are not assigned to any subjects.</p>
-            )}
-            <button
-              type="submit"
-              disabled={!selectedSubjectCode}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Launch Session
-            </button>
-          </form>
-        </div>
 
-        {/* Analytics Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 lg:col-span-2">
-          <h2 className="text-lg font-bold text-gray-900 mb-4">Recent Attendance Overview</h2>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                />
-                <Bar dataKey="present" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Present" />
-                <Bar dataKey="total" fill="#e2e8f0" radius={[4, 4, 0, 0]} name="Total Capacity" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">Active & Recent Sessions</h3>
-        </div>
-        <div className="divide-y divide-gray-200">
-          {isLoading ? (
-            <div className="p-6 text-center text-gray-500">Loading sessions...</div>
-          ) : (
-            sessions.map((session) => (
-              <div key={session.id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <h4 className="text-lg font-medium text-gray-900">{session.subject}</h4>
-                      <span className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                        {session.subjectCode}
-                      </span>
-                      {session.isActive && (
-                        <span className="text-xs font-semibold bg-green-100 text-green-800 px-2 py-0.5 rounded-full animate-pulse">
-                          LIVE
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm text-gray-500">
-                      <div className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-1.5" />
-                        {session.date}
-                      </div>
-                      <div className="flex items-center">
-                        <Clock className="w-4 h-4 mr-1.5" />
-                        {session.startTime} - {session.endTime}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-4 sm:mt-0 flex items-center space-x-6">
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-gray-900">Attendance</div>
-                      <div className="text-2xl font-bold text-blue-600">
-                        {session.totalStudents > 0 ? Math.round((session.totalPresent / session.totalStudents) * 100) : 0}%
-                      </div>
-                    </div>
-                    
-                    <button 
-                        onClick={() => openAttendanceModal(session)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Manage Attendance"
-                    >
-                        <ClipboardList className="w-6 h-6" />
-                    </button>
-                  </div>
+          {activeSession ? (
+            <div className="space-y-6">
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-green-800">Status</span>
+                  <span className="px-2 py-1 bg-green-200 text-green-800 text-xs font-bold rounded uppercase">Live</span>
+                </div>
+                <p className="text-lg font-bold text-gray-900">
+                  {subjects.find(s => s.id === activeSession.subjectId)?.name}
+                </p>
+                <div className="mt-2 text-sm text-gray-600">
+                  <p>Start: {new Date(activeSession.startTime).toLocaleTimeString()}</p>
+                  <p>End: {activeSession.endTime ? new Date(activeSession.endTime).toLocaleTimeString() : 'Manual'}</p>
                 </div>
               </div>
-            ))
+
+              <button
+                onClick={handleEndSession}
+                className="w-full bg-red-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center justify-center"
+              >
+                <Square className="mr-2" size={18} fill="currentColor" /> End Class Session
+              </button>
+              
+              <button
+                onClick={() => onNavigate('kiosk')}
+                className="w-full bg-indigo-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center"
+              >
+                <Users className="mr-2" size={18} /> Open Kiosk View
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Subject</label>
+                <select
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="block w-full border border-gray-300 rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">-- Choose Subject --</option>
+                  {facultySubjects.length > 0 ? (
+                    facultySubjects.map(sub => (
+                      <option key={sub.id} value={sub.id}>{sub.name} ({sub.code})</option>
+                    ))
+                  ) : (
+                    <option disabled>No subjects assigned</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                   <input 
+                     type="datetime-local" 
+                     value={startTime} 
+                     onChange={(e) => setStartTime(e.target.value)}
+                     className="block w-full border border-gray-300 rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                   />
+                </div>
+                <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                   <input 
+                     type="datetime-local" 
+                     value={endTime} 
+                     onChange={(e) => setEndTime(e.target.value)}
+                     className="block w-full border border-gray-300 rounded-lg p-2.5 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                   />
+                </div>
+              </div>
+
+              <button
+                onClick={handleStartSession}
+                disabled={!selectedSubject}
+                className={`w-full px-4 py-3 rounded-lg font-semibold flex items-center justify-center transition-colors ${
+                  !selectedSubject 
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-900 text-white hover:bg-gray-800'
+                }`}
+              >
+                <Play className="mr-2" size={18} fill="currentColor" /> Start Class Session
+              </button>
+            </div>
           )}
+        </div>
+
+        {/* Live Statistics */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+           <h2 className="text-lg font-semibold text-gray-800 mb-4">Live Attendance Tracking</h2>
+           {activeSession ? (
+             <div className="h-64 w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={liveStats} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={80} tick={{fontSize: 14}} />
+                    <Tooltip cursor={{fill: 'transparent'}} />
+                    <Bar dataKey="value" barSize={40} radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#666' }} />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
+           ) : (
+             <div className="h-64 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+               Start a session to view live statistics
+             </div>
+           )}
         </div>
       </div>
 
-      {/* Manual Attendance Modal */}
-      {showAttendanceModal && selectedSession && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[80vh]">
-                <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900">Manage Attendance</h2>
-                        <p className="text-sm text-gray-500">{selectedSession.subject} ({selectedSession.subjectCode})</p>
-                    </div>
-                    <button onClick={() => setShowAttendanceModal(false)} className="text-gray-400 hover:text-gray-500">
-                        <span className="text-2xl">&times;</span>
-                    </button>
-                </div>
-                
-                <div className="p-6 overflow-y-auto flex-1">
-                    {sessionStudents.length === 0 ? (
-                        <p className="text-center text-gray-500">No students enrolled in this subject.</p>
-                    ) : (
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead>
-                                <tr>
-                                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">Student</th>
-                                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider py-2">Enrollment</th>
-                                    <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider py-2">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {sessionStudents.map(({ student, isPresent }) => (
-                                    <tr key={student.id}>
-                                        <td className="py-3 text-sm font-medium text-gray-900">{student.name}</td>
-                                        <td className="py-3 text-sm text-gray-500">{student.enrollmentNo}</td>
-                                        <td className="py-3 text-right">
-                                            <button 
-                                                onClick={() => toggleAttendance(student, isPresent)}
-                                                className={`
-                                                    inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors
-                                                    ${isPresent 
-                                                        ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                                                        : 'bg-red-100 text-red-800 hover:bg-red-200'}
-                                                `}
-                                            >
-                                                {isPresent ? (
-                                                    <><CheckCircle className="w-3 h-3 mr-1" /> Present</>
-                                                ) : (
-                                                    <><XCircle className="w-3 h-3 mr-1" /> Absent</>
-                                                )}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-
-                <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl flex justify-end">
-                    <button 
-                        onClick={() => setShowAttendanceModal(false)}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                        Done
-                    </button>
-                </div>
-            </div>
+      {/* History Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">Recent Sessions History</h3>
         </div>
-      )}
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm text-left">
+            <thead className="bg-gray-50 text-gray-600 font-medium">
+              <tr>
+                <th className="px-6 py-3">Subject</th>
+                <th className="px-6 py-3">Date</th>
+                <th className="px-6 py-3">Start Time</th>
+                <th className="px-6 py-3">End Time</th>
+                <th className="px-6 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {mySessions.sort((a,b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()).map(session => (
+                <tr key={session.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 font-medium text-gray-900">
+                    {subjects.find(s => s.id === session.subjectId)?.name}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500">
+                    {new Date(session.startTime).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500">
+                    {new Date(session.startTime).toLocaleTimeString()}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500">
+                    {session.endTime ? new Date(session.endTime).toLocaleTimeString() : '-'}
+                  </td>
+                  <td className="px-6 py-4">
+                    {session.isActive ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Active</span>
+                    ) : (
+                      <span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">Completed</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {mySessions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    No sessions found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };
+
+export default FacultyDashboard;

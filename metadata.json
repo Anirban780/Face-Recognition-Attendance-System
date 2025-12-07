@@ -1,6 +1,6 @@
 {
-  "name": "Copy of FaceAuth Attendance",
-  "description": "A comprehensive React frontend for a college Face Recognition Attendance System featuring role-based dashboards, student management, and a webcam-enabled kiosk mode.",
+  "name": "FaceAuth Attendance",
+  "description": "A face recognition attendance system for students and faculty with kiosk mode.",
   "requestFramePermissions": [
     "camera"
   ]

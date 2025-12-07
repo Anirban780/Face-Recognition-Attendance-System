@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-faceauth-attendance",
+  "name": "faceauth-attendance",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,15 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "recharts": "^3.5.1",
-    "react-dom": "^19.2.1",
-    "react-router-dom": "^7.10.1",
     "lucide-react": "^0.556.0",
     "react": "^19.2.1",
-    "axios": "^1.13.2"
+    "react-dom": "^19.2.1",
+    "recharts": "^3.5.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
+    "@types/node": "^22.19.1",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

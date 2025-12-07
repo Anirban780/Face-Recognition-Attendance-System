@@ -1,108 +1,49 @@
-import React from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { Layout } from './components/Layout';
-import { Login } from './pages/Login';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { AdminFaculty } from './pages/AdminFaculty';
-import { FacultyDashboard } from './pages/FacultyDashboard';
-import { StudentPortal } from './pages/StudentPortal';
-import { Kiosk } from './pages/Kiosk';
-import { UserRole } from './types';
+import React, { useState } from 'react';
+import { AppProvider } from './context/AppContext';
+import Navbar from './components/Navbar';
+import Home from './pages/Home';
+import StudentDashboard from './pages/StudentDashboard';
+import FacultyDashboard from './pages/FacultyDashboard';
+import AdminDashboard from './pages/AdminDashboard';
+import Kiosk from './pages/Kiosk';
 
-// Protected Route Component
-const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: UserRole[] }> = ({ 
-  children, 
-  allowedRoles 
-}) => {
-  const { user, isLoading } = useAuth();
-  const location = useLocation();
+const AppContent: React.FC = () => {
+  const [currentPage, setCurrentPage] = useState('home');
 
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home':
+        return <Home onNavigate={setCurrentPage} />;
+      case 'student':
+        return <StudentDashboard />;
+      case 'faculty':
+        return <FacultyDashboard onNavigate={setCurrentPage} />;
+      case 'admin':
+        return <AdminDashboard />;
+      case 'kiosk':
+        return <Kiosk onNavigate={setCurrentPage} />;
+      default:
+        return <Home onNavigate={setCurrentPage} />;
+    }
+  };
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // Redirect to their default dashboard if trying to access unauthorized page
-    if (user.role === UserRole.ADMIN) return <Navigate to="/admin" replace />;
-    if (user.role === UserRole.FACULTY) return <Navigate to="/faculty" replace />;
-    if (user.role === UserRole.STUDENT) return <Navigate to="/student" replace />;
-  }
-
-  return <Layout>{children}</Layout>;
-};
-
-const AppRoutes = () => {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      
-      {/* Admin Routes */}
-      <Route path="/admin" element={<Navigate to="/admin/students" replace />} />
-      <Route 
-        path="/admin/students" 
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
-            <AdminDashboard />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/admin/faculties" 
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.ADMIN]}>
-            <AdminFaculty />
-          </ProtectedRoute>
-        } 
-      />
-
-      {/* Faculty Routes */}
-      <Route 
-        path="/faculty/*" 
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.FACULTY]}>
-            <FacultyDashboard />
-          </ProtectedRoute>
-        } 
-      />
-
-      {/* Student Routes */}
-      <Route 
-        path="/student/*" 
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.STUDENT]}>
-            <StudentPortal />
-          </ProtectedRoute>
-        } 
-      />
-
-      {/* Kiosk Route (Admin removed, only Faculty or authorized) */}
-      <Route 
-        path="/kiosk" 
-        element={
-          <ProtectedRoute allowedRoles={[UserRole.FACULTY]}>
-            <Kiosk />
-          </ProtectedRoute>
-        } 
-      />
-
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {currentPage !== 'kiosk' && (
+        <Navbar onNavigate={setCurrentPage} currentPage={currentPage} />
+      )}
+      <main>
+        {renderPage()}
+      </main>
+    </div>
   );
 };
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
   );
 };
 

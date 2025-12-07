@@ -1,61 +1,45 @@
 export enum UserRole {
-  ADMIN = 'ADMIN',
+  STUDENT = 'STUDENT',
   FACULTY = 'FACULTY',
-  STUDENT = 'STUDENT'
-}
-
-export interface Subject {
-  code: string;
-  name: string;
+  ADMIN = 'ADMIN'
 }
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string; // For mock auth
+  enrollmentNo?: string; // For students/faculty
   role: UserRole;
   avatar?: string;
-  assignedSubjects?: string[]; // Subject codes for Faculty
+  semester?: number; // Only for students
+  subjectIds?: string[]; // IDs of subjects assigned to student or faculty
 }
 
-export interface Student {
+export interface Subject {
   id: string;
-  enrollmentNo: string;
+  code: string;
   name: string;
-  email: string;
-  semester: number;
-  branch: string;
-  status: 'Active' | 'Inactive';
-  photoCount: number;
-  enrolledSubjects: string[]; // Subject codes
 }
 
-export interface AttendanceSession {
+export interface ClassSession {
   id: string;
-  subject: string;
-  subjectCode: string;
-  facultyName: string;
-  date: string;
-  startTime: string;
-  endTime: string;
+  subjectId: string;
+  facultyId: string;
+  startTime: string; // ISO string
+  endTime: string | null; // ISO string
   isActive: boolean;
-  totalPresent: number;
-  totalStudents: number;
 }
 
 export interface AttendanceRecord {
   id: string;
-  studentName: string;
-  enrollmentNo: string;
-  subject: string;
-  date: string;
-  time: string;
-  status: 'Present' | 'Absent';
+  sessionId: string;
+  studentId: string;
+  timestamp: string;
+  verified: boolean;
 }
 
-export interface DashboardStats {
-  totalStudents: number;
-  activeSessions: number;
-  averageAttendance: number;
-  pendingApprovals: number;
+export interface MockFaceData {
+  studentId: string;
+  imageCount: number;
 }
