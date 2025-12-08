@@ -1,17 +1,15 @@
 # Face Recognition Attendance System
 
-A modern, real-time, privacy-first face recognition attendance system with offline kiosk support, manual resolution queue, and OTP fallback. Designed for universities and colleges.
+A modern, real-time, privacy-first face recognition attendance system with offline kiosk support, manual resolution. Designed for universities and colleges.
 
 ---
 
 ## Features
 
 - **Four roles**: Admin · Faculty · Student · Kiosk
-- Real-time attendance via WebSocket
-- Offline-capable kiosk (IndexedDB + Service Worker queue)
+- Polling-bases attendance
+- Offline-capable kiosk 
 - Edge or server-side embedding computation
-- Manual unresolved queue with top candidate suggestions
-- OTP fallback for missed/unresolved students
 - Automatic raw image purging (privacy compliant)
 - CSV export & full audit trail
 - Minimal liveness check (prevents photo spoofing)
@@ -37,9 +35,6 @@ A modern, real-time, privacy-first face recognition attendance system with offli
 │ InsightFace / ArcFace / FaceNet │
 └────────────────────────────────────┘
 
-yaml
-Copy code
-
 ---
 
 ## Frontend (React PWA)
@@ -63,13 +58,12 @@ Progressive Web App with role-based routing and offline kiosk support.
 - Unresolved queue with:
   - Thumbnail preview
   - Top 3 nearest candidates
-  - Actions: Manual Mark · Send OTP · Reject
+  - Actions: Manual Mark · Reject
 - Attendance reports & CSV export per subject/date range
 
 ### Student Portal
 - View enrolled subjects
 - Attendance percentage & detailed history
-- "Request Help" → triggers OTP if missed during active window
 - Simple profile page
 
 ### Kiosk Mode (Offline-First)
