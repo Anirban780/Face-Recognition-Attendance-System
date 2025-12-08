@@ -24,9 +24,10 @@ class UserOut(BaseModel):
     enrollment_no: Optional[str]
     semester: Optional[int]
     created_at: datetime
+    subject_ids: List[str] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class StartSessionByCode(BaseModel):
     subject_code: str
@@ -44,4 +45,4 @@ class SubjectOut(BaseModel):
     code: str
 
     class Config:
-        orm_mode = True
+        from_attributes = True

@@ -18,8 +18,8 @@ export interface User {
 
 export interface Subject {
   id: string;
-  code: string;
   name: string;
+  code: string;
 }
 
 export interface ClassSession {
@@ -36,7 +36,9 @@ export interface AttendanceRecord {
   sessionId: string;
   studentId: string;
   timestamp: string;
-  verified: boolean;
+  status: string;
+  confidence: number;
+  imagePath: string;
 }
 
 export interface MockFaceData {
