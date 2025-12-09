@@ -1,0 +1,7 @@
+{
+  "name": "FaceAuth Attendance",
+  "description": "A face recognition attendance system for students and faculty with kiosk mode.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
