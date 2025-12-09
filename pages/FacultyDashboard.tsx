@@ -64,6 +64,16 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
 
 	// Live stats for active session
 	const [liveStats, setLiveStats] = useState<any[]>([]);
+	const [assignedStudentsForActive, setAssignedStudentsForActive] = useState<
+		any[]
+	>([]);
+	const [presentStudentsForActive, setPresentStudentsForActive] = useState<
+		any[]
+	>([]);
+
+	const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+		null
+	);
 
 	useEffect(() => {
 		if (activeSession) {
@@ -78,8 +88,19 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
 					u.subjectIds?.includes(activeSession.subjectId)
 			);
 
-			const presentCount = records.length;
+			const presentIds = new Set(
+				records.map((r: any) => r.studentId) // assuming attendanceRecords have studentId
+			);
+
+			const presentStudents = assignedStudents.filter((s) =>
+				presentIds.has(s.id)
+			);
+
+			const presentCount = presentStudents.length;
 			const absentCount = assignedStudents.length - presentCount;
+
+			setAssignedStudentsForActive(assignedStudents);
+			setPresentStudentsForActive(presentStudents);
 
 			setLiveStats([
 				{ name: "Present", value: presentCount, fill: "#4ade80" },
@@ -90,8 +111,9 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
 				},
 			]);
 		} else {
-			// No active session => clear stats
 			setLiveStats([]);
+			setAssignedStudentsForActive([]);
+			setPresentStudentsForActive([]);
 		}
 	}, [attendanceRecords, activeSession, users]);
 
@@ -294,33 +316,77 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
 						Live Attendance Tracking
 					</h2>
 					{activeSession ? (
-						<div className="h-64 w-full">
-							<ResponsiveContainer width="100%" height="100%">
-								<BarChart data={liveStats} layout="vertical">
-									<CartesianGrid
-										strokeDasharray="3 3"
-										horizontal={true}
-										vertical={false}
-									/>
-									<XAxis type="number" hide />
-									<YAxis
-										dataKey="name"
-										type="category"
-										width={80}
-										tick={{ fontSize: 14 }}
-									/>
-									<Tooltip cursor={{ fill: "transparent" }} />
-									<Bar
-										dataKey="value"
-										barSize={40}
-										radius={[0, 4, 4, 0]}
-										label={{
-											position: "right",
-											fill: "#666",
-										}}
-									/>
-								</BarChart>
-							</ResponsiveContainer>
+						<div className="w-full">
+							{/* chart gets fixed height */}
+							<div className="h-64">
+								<ResponsiveContainer width="100%" height="100%">
+									<BarChart
+										data={liveStats}
+										layout="vertical"
+									>
+										<CartesianGrid
+											strokeDasharray="3 3"
+											horizontal={true}
+											vertical={false}
+										/>
+										<XAxis type="number" hide />
+										<YAxis
+											dataKey="name"
+											type="category"
+											width={80}
+											tick={{ fontSize: 14 }}
+										/>
+										<Tooltip
+											cursor={{ fill: "transparent" }}
+										/>
+										<Bar
+											dataKey="value"
+											barSize={40}
+											radius={[0, 4, 4, 0]}
+											label={{
+												position: "right",
+												fill: "#666",
+											}}
+										/>
+									</BarChart>
+								</ResponsiveContainer>
+							</div>
+
+							{/* summary stays inside card, below chart */}
+							<div className="mt-4">
+								<p className="text-sm text-gray-700 mb-2">
+									<strong>
+										{presentStudentsForActive.length}
+									</strong>{" "}
+									present out of{" "}
+									<strong>
+										{assignedStudentsForActive.length}
+									</strong>{" "}
+									students.
+								</p>
+								<div className="max-h-32 overflow-y-auto border border-gray-100 rounded-lg p-2 text-sm">
+									<p className="font-medium text-gray-800 mb-1">
+										Present students:
+									</p>
+									{presentStudentsForActive.length > 0 ? (
+										<ul className="list-disc pl-5 space-y-0.5">
+											{presentStudentsForActive.map(
+												(stu) => (
+													<li key={stu.id}>
+														{stu.name ||
+															stu.fullName ||
+															"Unnamed student"}
+													</li>
+												)
+											)}
+										</ul>
+									) : (
+										<p className="text-gray-400">
+											No one has marked attendance yet.
+										</p>
+									)}
+								</div>
+							</div>
 						</div>
 					) : (
 						<div className="h-64 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
@@ -356,60 +422,167 @@ const FacultyDashboard: React.FC<FacultyDashboardProps> = ({ onNavigate }) => {
 										new Date(b.startTime).getTime() -
 										new Date(a.startTime).getTime()
 								)
-								.map((session) => (
-									<tr
-										key={session.id}
-										className="hover:bg-gray-50"
-									>
-										<td className="px-6 py-4 font-medium text-gray-900">
-											{
-												subjects.find(
-													(s) =>
-														s.id ===
-														session.subjectId
-												)?.name
-											}
-										</td>
-										<td className="px-6 py-4 text-gray-500">
-											{new Date(
-												session.startTime
-											).toLocaleDateString()}
-										</td>
-										<td className="px-6 py-4 text-gray-500">
-											{new Date(
-												session.startTime
-											).toLocaleTimeString()}
-										</td>
-										<td className="px-6 py-4 text-gray-500">
-											{session.endTime
-												? new Date(
-														session.endTime
-												  ).toLocaleTimeString()
-												: "-"}
-										</td>
-										<td className="px-6 py-4">
-											{session.isActive ? (
-												<span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-													Active
-												</span>
-											) : (
-												<span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
-													Completed
-												</span>
+								.map((session) => {
+									// 🔍 students assigned to this subject
+									const assignedStudents = users.filter(
+										(u) =>
+											u.role === UserRole.STUDENT &&
+											u.subjectIds?.includes(
+												session.subjectId
+											)
+									);
+
+									// 🔍 attendance records for this session
+									const recordsForSession =
+										attendanceRecords.filter(
+											(r) => r.sessionId === session.id
+										);
+
+									const presentIds = new Set(
+										recordsForSession.map(
+											(r: any) => r.studentId
+										)
+									);
+									const presentStudents =
+										assignedStudents.filter((s) =>
+											presentIds.has(s.id)
+										);
+
+									return (
+										<React.Fragment key={session.id}>
+											<tr className="hover:bg-gray-50">
+												<td className="px-6 py-4 font-medium text-gray-900">
+													{
+														subjects.find(
+															(s) =>
+																s.id ===
+																session.subjectId
+														)?.name
+													}
+												</td>
+												<td className="px-6 py-4 text-gray-500">
+													{new Date(
+														session.startTime
+													).toLocaleDateString()}
+												</td>
+												<td className="px-6 py-4 text-gray-500">
+													{new Date(
+														session.startTime
+													).toLocaleTimeString()}
+												</td>
+												<td className="px-6 py-4 text-gray-500">
+													{session.endTime
+														? new Date(
+																session.endTime
+														  ).toLocaleTimeString()
+														: "-"}
+												</td>
+												<td className="px-6 py-4 flex items-center gap-2">
+													{session.isActive ? (
+														<span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+															Active
+														</span>
+													) : (
+														<span className="px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+															Completed
+														</span>
+													)}
+
+													{/* 👇 attendance summary */}
+													<span className="text-xs text-gray-600">
+														{presentStudents.length}
+														/
+														{
+															assignedStudents.length
+														}{" "}
+														present
+													</span>
+
+													<button
+														type="button"
+														onClick={() =>
+															setSelectedSessionId(
+																(prev) =>
+																	prev ===
+																	session.id
+																		? null
+																		: session.id
+															)
+														}
+														className="ml-auto text-xs text-indigo-600 hover:underline"
+													>
+														{selectedSessionId ===
+														session.id
+															? "Hide"
+															: "View students"}
+													</button>
+												</td>
+											</tr>
+
+											{/* 👇 details row when expanded */}
+											{selectedSessionId ===
+												session.id && (
+												<tr>
+													<td
+														colSpan={5}
+														className="px-6 py-4 bg-gray-50"
+													>
+														<div className="text-sm">
+															<p className="font-medium text-gray-800 mb-2">
+																Present students
+																(
+																{
+																	presentStudents.length
+																}
+																/
+																{
+																	assignedStudents.length
+																}
+																):
+															</p>
+															{presentStudents.length >
+															0 ? (
+																<ul className="list-disc pl-5 space-y-0.5 max-h-40 overflow-y-auto">
+																	{presentStudents.map(
+																		(
+																			stu
+																		) => (
+																			<li
+																				key={
+																					stu.id
+																				}
+																			>
+																				{stu.name ||
+																					stu.fullName ||
+																					"Unnamed student"}
+																				<span className="text-gray-500">
+																					{" "}
+																					(
+																					{
+																						stu.enrollmentNo
+																					}
+																					)
+																				</span>
+																			</li>
+																		)
+																	)}
+																</ul>
+															) : (
+																<p className="text-gray-500">
+																	No
+																	attendance
+																	recorded for
+																	this
+																	session.
+																</p>
+															)}
+														</div>
+													</td>
+												</tr>
 											)}
-										</td>
-									</tr>
-								))}
-							{mySessions.length === 0 && (
-								<tr>
-									<td
-										colSpan={5}
-										className="px-6 py-8 text-center text-gray-500"
-									>
-										No sessions found.
-									</td>
-								</tr>
-							)}
+										</React.Fragment>
+									);
+								})}
 						</tbody>
 					</table>
 				</div>

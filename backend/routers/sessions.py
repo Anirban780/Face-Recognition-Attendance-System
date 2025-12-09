@@ -12,6 +12,9 @@ from sqlalchemy import or_
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
+from sqlalchemy import or_
+from datetime import datetime, timezone
+
 @router.post("/start")
 def start_session_by_code(
     payload: StartSessionByCode, db: Session = Depends(get_db)
@@ -24,14 +27,21 @@ def start_session_by_code(
         )
 
     if payload.faculty_id:
+        now = datetime.now(timezone.utc)
+
         existing_any = (
             db.query(ClassSession)
             .filter(
                 ClassSession.faculty_id == payload.faculty_id,
                 ClassSession.is_active == True,
+                or_(
+                    ClassSession.end_time == None,
+                    ClassSession.end_time > now,
+                ),
             )
             .first()
         )
+
         if existing_any:
             raise HTTPException(
                 status_code=400,
@@ -58,6 +68,7 @@ def start_session_by_code(
         "end_time": cs.end_time,
         "is_active": cs.is_active,
     }
+
 
 
 @router.post("/{session_id}/end")
