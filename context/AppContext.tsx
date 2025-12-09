@@ -411,6 +411,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
 		}
 	};
 
+	const dataURLtoBlob = (dataUrl: string): Blob => {
+		const [meta, base64] = dataUrl.split(",");
+		const mime = meta.match(/:(.*?);/)?.[1] || "image/jpeg";
+		const binary = atob(base64);
+		const len = binary.length;
+		const bytes = new Uint8Array(len);
+		for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+		return new Blob([bytes], { type: mime });
+	};
+
+	const markAttendanceMultiCam = async (
+		sessionId: string,
+		frames: { cameraIndex: number; frameIndex: number; dataUrl: string }[]
+	) => {
+		const fd = new FormData();
+		fd.append("session_id", sessionId);
+
+		frames.forEach((f) => {
+			const blob = dataURLtoBlob(f.dataUrl);
+			fd.append(
+				"files",
+				blob,
+				`cam${f.cameraIndex + 1}_frame${f.frameIndex + 1}.jpg`
+			);
+		});
+
+		const res = await api.post("/api/kiosk/mark-attendance-multicam", fd, {
+			headers: { "Content-Type": "multipart/form-data" },
+		});
+
+		if (res.data.status === "matched") {
+			await fetchAllAttendance();
+		}
+
+		return res.data;
+	};
+
 	// ---------- return context ----------
 	return (
 		<AppContext.Provider
@@ -429,13 +466,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
 				markAttendance,
 				trainModel,
 				getActiveSession: (facultyId?: string) => {
-					// reuse earlier logic or call fetchAllSessions to ensure fresh
-					return sessions.find(
-						(s) =>
-							s.isActive &&
-							(!facultyId || s.facultyId === facultyId)
-					);
+					const now = new Date();
+
+					return sessions.find((s) => {
+						if (!s.isActive) return false;
+						if (facultyId && s.facultyId !== facultyId)
+							return false;
+
+						// If no endTime → treat as manually-ended session (still active until explicitly ended)
+						if (!s.endTime) return true;
+
+						// Only active if endTime is still in the future
+						return new Date(s.endTime) > now;
+					});
 				},
+				markAttendanceMultiCam,
 				addUser,
 				addSubject,
 			}}
