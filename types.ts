@@ -14,6 +14,7 @@ export interface User {
   avatar?: string;
   semester?: number; // Only for students
   subjectIds?: string[]; // IDs of subjects assigned to student or faculty
+  faceImageCount?: number;
 }
 
 export interface Subject {

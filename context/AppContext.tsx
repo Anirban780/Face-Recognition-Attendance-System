@@ -111,6 +111,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({
 			)}`,
 		// adjust according to your backend
 		subjectIds: u.subject_ids ?? u.subjectIds ?? [],
+		faceImageCount: u.face_image_count ?? 0,
 	});
 
 	const normalizeSession = (s: any): ClassSession => ({

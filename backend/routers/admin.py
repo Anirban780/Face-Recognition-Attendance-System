@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 import base64
+from sqlalchemy import func
 
 from ..deps import get_db
 from ..models import (
@@ -52,12 +53,26 @@ def create_user(in_user: UserCreate, db: Session = Depends(get_db)):
 @router.get("/users")
 def list_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     users = db.query(User).offset(skip).limit(limit).all()
+
+    # 🔹 Precompute face-embedding counts per user_id
+    face_counts = dict(
+        db.query(FaceEmbedding.user_id, func.count(FaceEmbedding.id))
+        .group_by(FaceEmbedding.user_id)
+        .all()
+    )
+
     result = []
     for u in users:
         base = UserOut.from_orm(u).dict()
+
         enrolls = db.query(CourseEnrollment).filter_by(user_id=u.id).all()
         base["subject_ids"] = [str(e.subject_id) for e in enrolls]
+
+        # 🔹 This is NOT a DB column, just an extra field in the response
+        base["face_image_count"] = int(face_counts.get(u.id, 0))
+
         result.append(base)
+
     return result
 
 
