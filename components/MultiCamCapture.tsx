@@ -1,160 +1,213 @@
 import React, { useEffect, useRef, useState } from "react";
 
 interface MultiCamCaptureProps {
-	onCapture: (
-		frames: { cameraIndex: number; frameIndex: number; dataUrl: string }[]
-	) => void;
-	isProcessing: boolean;
+  onCapture: (
+    frames: { cameraIndex: number; frameIndex: number; dataUrl: string }[]
+  ) => void;
+  isProcessing: boolean;
 }
 
 const MultiCamCapture: React.FC<MultiCamCaptureProps> = ({
-	onCapture,
-	isProcessing,
+  onCapture,
+  isProcessing,
 }) => {
-	const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-	const [cameraCount, setCameraCount] = useState(0);
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [activeDevice, setActiveDevice] = useState<MediaDeviceInfo | null>(null);
+  const [hasAnyCamera, setHasAnyCamera] = useState(false);
 
-	const videoRefs = useRef<HTMLVideoElement[]>([]);
-	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-	// --------------------------------------------------------------
-	// Detect available cameras
-	// --------------------------------------------------------------
-	useEffect(() => {
-		navigator.mediaDevices
-			.enumerateDevices()
-			.then((devs) => {
-				const cams = devs.filter((d) => d.kind === "videoinput");
-				setDevices(cams);
+  // --------------------------------------------------------------
+  // Detect cameras and pick a NON-default one (assumed external)
+  // --------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      try {
+        // 1) Get default camera (usually laptop inbuilt)
+        const tempStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        const defaultTrack = tempStream.getVideoTracks()[0];
+        const defaultSettings = defaultTrack.getSettings();
+        const defaultDeviceId =
+          (defaultSettings.deviceId as string | undefined) || null;
 
-				// Limit to max 2 cameras but allow 0 or 1
-				setCameraCount(Math.min(2, cams.length));
-			})
-			.catch((err) => console.error("Camera detection error:", err));
-	}, []);
+        // stop temp stream
+        tempStream.getTracks().forEach((t) => t.stop());
 
-	// --------------------------------------------------------------
-	// Start camera streams
-	// --------------------------------------------------------------
-	useEffect(() => {
-		if (cameraCount === 0) return;
+        // 2) Enumerate all video input devices
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter((d) => d.kind === "videoinput");
+        setDevices(cams);
+        setHasAnyCamera(cams.length > 0);
 
-		devices.slice(0, cameraCount).forEach((device, i) => {
-			navigator.mediaDevices
-				.getUserMedia({
-					video: { deviceId: { exact: device.deviceId } },
-				})
-				.then((stream) => {
-					if (videoRefs.current[i]) {
-						videoRefs.current[i].srcObject = stream;
-					}
-				})
-				.catch((err) => console.error("Camera stream error:", err));
-		});
-	}, [devices, cameraCount]);
+        if (cams.length === 0) {
+          setActiveDevice(null);
+          return;
+        }
 
-	const grabFrame = (video: HTMLVideoElement): string => {
-		const canvas = canvasRef.current!;
-		canvas.width = video.videoWidth;
-		canvas.height = video.videoHeight;
-		const ctx = canvas.getContext("2d")!;
-		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-		return canvas.toDataURL("image/jpeg");
-	};
+        // 3) Prefer any NON-default cam (likely external USB)
+        let chosen: MediaDeviceInfo | null = null;
+        if (defaultDeviceId) {
+          const others = cams.filter((c) => c.deviceId !== defaultDeviceId);
+          if (others.length > 0) {
+            chosen = others[0];
+          } else {
+            // only one camera exists (the default one)
+            chosen = null; // we will NOT use laptop cam in kiosk
+          }
+        } else {
+          // No default id (rare), just use the last camera (often external)
+          chosen = cams[cams.length - 1];
+        }
 
-	// --------------------------------------------------------------
-	// Handle capture (2 frames per camera)
-	// --------------------------------------------------------------
-	const handleCapture = () => {
-		if (cameraCount === 0) return; // safety
+        setActiveDevice(chosen);
+      } catch (err) {
+        console.error("Camera init error:", err);
+        setHasAnyCamera(false);
+        setActiveDevice(null);
+      }
+    };
 
-		const frames: {
-			cameraIndex: number;
-			frameIndex: number;
-			dataUrl: string;
-		}[] = [];
+    init();
+  }, []);
 
-		for (let cam = 0; cam < cameraCount; cam++) {
-			const video = videoRefs.current[cam];
-			if (!video) continue;
+  // --------------------------------------------------------------
+  // Start stream for the chosen external webcam
+  // --------------------------------------------------------------
+  useEffect(() => {
+    if (!activeDevice) return;
 
-			// Capture 2 frames
-			for (let f = 0; f < 2; f++) {
-				frames.push({
-					cameraIndex: cam,
-					frameIndex: f,
-					dataUrl: grabFrame(video),
-				});
-			}
-		}
+    let currentStream: MediaStream | null = null;
 
-		if (frames.length === 0) return; // prevents empty payloads
-		onCapture(frames);
-	};
+    navigator.mediaDevices
+      .getUserMedia({
+        video: { deviceId: { exact: activeDevice.deviceId } },
+      })
+      .then((stream) => {
+        currentStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      })
+      .catch((err) => console.error("Camera stream error:", err));
 
-	// --------------------------------------------------------------
-	// When NO camera is connected
-	// --------------------------------------------------------------
-	if (cameraCount === 0) {
-		return (
-			<div className="w-full text-center py-10">
-				<div className="bg-red-500/20 text-red-300 border border-red-500/40 p-6 rounded-xl max-w-lg mx-auto">
-					<h2 className="text-2xl font-bold mb-2">
-						No Webcam Detected
-					</h2>
-					<p className="text-gray-300">
-						Please connect at least one camera to continue.
-					</p>
-				</div>
+    return () => {
+      if (currentStream) {
+        currentStream.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, [activeDevice]);
 
-				<button
-					disabled
-					className="mt-6 px-10 py-4 rounded-full bg-gray-700 text-gray-400 text-xl cursor-not-allowed"
-				>
-					Capture Disabled
-				</button>
-			</div>
-		);
-	}
+  const grabFrame = (): string => {
+    const canvas = canvasRef.current!;
+    const video = videoRef.current!;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg");
+  };
 
-	// --------------------------------------------------------------
-	// Normal 1–2 webcam display
-	// --------------------------------------------------------------
-	return (
-		<div className="w-full flex flex-col items-center">
-			<div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-				{Array.from({ length: cameraCount }).map((_, i) => (
-					<div
-						key={i}
-						className="relative rounded-xl overflow-hidden bg-black shadow"
-					>
-						<video
-							ref={(el) => {
-								if (el) videoRefs.current[i] = el;
-							}}
-							autoPlay
-							muted
-							playsInline
-							className="w-full h-full object-cover transform -scale-x-100"
-						/>
-						<div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
-							Camera {i + 1}
-						</div>
-					</div>
-				))}
-			</div>
+  // --------------------------------------------------------------
+  // Capture: 2 frames from the single active webcam
+  // --------------------------------------------------------------
+  const handleCapture = () => {
+    if (!activeDevice || !videoRef.current) return;
 
-			<canvas ref={canvasRef} className="hidden" />
+    const frames: {
+      cameraIndex: number;
+      frameIndex: number;
+      dataUrl: string;
+    }[] = [];
 
-			<button
-				onClick={handleCapture}
-				disabled={isProcessing}
-				className="mt-6 px-10 py-4 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xl shadow disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
-			>
-				{isProcessing ? "Processing..." : "Capture Attendance"}
-			</button>
-		</div>
-	);
+    for (let f = 0; f < 2; f++) {
+      frames.push({
+        cameraIndex: 0,
+        frameIndex: f,
+        dataUrl: grabFrame(),
+      });
+    }
+
+    if (frames.length === 0) return;
+    onCapture(frames);
+  };
+
+  // --------------------------------------------------------------
+  // When we have cameras but no external (non-default) camera
+  // --------------------------------------------------------------
+  if (!activeDevice) {
+    return (
+      <div className="w-full text-center py-10">
+        <div className="bg-red-500/20 text-red-300 border border-red-500/40 p-6 rounded-xl max-w-lg mx-auto">
+          <h2 className="text-2xl font-bold mb-2">
+            {hasAnyCamera ? "No external webcam selected" : "No webcam detected"}
+          </h2>
+          {hasAnyCamera ? (
+            <p className="text-gray-300">
+              Only the default camera was found (usually the laptop&apos;s
+              inbuilt camera). This kiosk is configured to skip the default
+              camera. Please connect an external USB webcam.
+            </p>
+          ) : (
+            <p className="text-gray-300">
+              No camera is available. Please connect an external webcam.
+            </p>
+          )}
+        </div>
+
+        <button
+          disabled
+          className="mt-6 px-10 py-4 rounded-full bg-gray-700 text-gray-400 text-xl cursor-not-allowed"
+        >
+          Capture Disabled
+        </button>
+
+        {/* 
+          NOTE: 2-webcam support is temporarily disabled.
+          Previously, we supported multiple cameras & captured 2 frames per cam.
+          You can reintroduce that by:
+            - Tracking an array of activeDevices instead of one
+            - Rendering multiple <video> elements
+            - Looping over them in handleCapture
+        */}
+      </div>
+    );
+  }
+
+  // --------------------------------------------------------------
+  // Normal single webcam UI
+  // --------------------------------------------------------------
+  const activeLabel =
+    activeDevice.label || "Selected external camera";
+
+  return (
+    <div className="w-full flex flex-col items-center">
+      <div className="relative rounded-xl overflow-hidden bg-black shadow w-full max-w-md">
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          className="w-full h-full object-cover transform -scale-x-100"
+        />
+        <div className="absolute bottom-2 left-2 text-xs text-white bg-black/50 px-2 py-1 rounded">
+          {activeLabel}
+        </div>
+      </div>
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      <button
+        onClick={handleCapture}
+        disabled={isProcessing}
+        className="mt-6 px-10 py-4 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xl shadow disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed"
+      >
+        {isProcessing ? "Processing..." : "Capture Attendance"}
+      </button>
+    </div>
+  );
 };
 
 export default MultiCamCapture;

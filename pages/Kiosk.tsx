@@ -25,16 +25,12 @@ type KioskResult =
 	  };
 
 const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
-	const {
-		users,
-		subjects,
-		sessions,
-		markAttendanceMultiCam, 
-	} = useApp();
+	const { users, subjects, sessions, markAttendanceMultiCam } = useApp();
 
 	const [activeSessions, setActiveSessions] = useState<ClassSession[]>([]);
-	const [selectedSession, setSelectedSession] =
-		useState<ClassSession | null>(null);
+	const [selectedSession, setSelectedSession] = useState<ClassSession | null>(
+		null
+	);
 
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [result, setResult] = useState<KioskResult | null>(null);
@@ -111,9 +107,7 @@ const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
 						{activeSessions.length > 0 ? (
 							<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 								{activeSessions.map((session) => {
-									const sub = getSubjectBySession(
-										session.id
-									);
+									const sub = getSubjectBySession(session.id);
 									const faculty =
 										getFacultyForSession(session);
 									return (
@@ -133,8 +127,7 @@ const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
 												</span>
 											</div>
 											<h3 className="text-2xl font-bold text-white mb-1">
-												{sub?.name ??
-													"Unknown Subject"}
+												{sub?.name ?? "Unknown Subject"}
 											</h3>
 											<p className="text-indigo-400 font-medium mb-4">
 												{sub?.code}
@@ -219,11 +212,10 @@ const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
 									setIsProcessing(true);
 									setResult(null);
 
-									const res =
-										await markAttendanceMultiCam(
-											selectedSession.id,
-											frames
-										);
+									const res = await markAttendanceMultiCam(
+										selectedSession.id,
+										frames
+									);
 
 									switch (res.status) {
 										case "matched":
@@ -232,8 +224,7 @@ const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
 												message:
 													"Attendance Marked Successfully",
 												studentName: res.name,
-												enrollmentNo:
-													res.enrollment_no,
+												enrollmentNo: res.enrollment_no,
 											});
 											break;
 
@@ -241,21 +232,38 @@ const Kiosk: React.FC<KioskProps> = ({ onNavigate }) => {
 											setResult({
 												status: "warning",
 												message:
-													"Attendance already marked.",
+													"Attendance already marked for this session.",
+												studentName: res.name,
+												enrollmentNo: res.enrollment_no,
 											});
 											break;
 
 										case "not_enrolled":
-										case "unresolved":
+											setResult({
+												status: "warning",
+												message:
+													"You are recognized, but not enrolled in this subject. Please contact faculty.",
+												studentName: res.name,
+												enrollmentNo: res.enrollment_no,
+											});
+											break;
+
 										case "no_face":
 											setResult({
 												status: "error",
 												message:
 													res.message ||
-													"Unable to mark attendance.",
+													"No face detected. Please align your face with the camera.",
+											});
+											break;
+
+										case "unresolved":
+											setResult({
+												status: "error",
+												message:
+													"Face could not be confidently matched. Please try again.",
 												studentName: res.name,
-												enrollmentNo:
-													res.enrollment_no,
+												enrollmentNo: res.enrollment_no,
 											});
 											break;
 
